@@ -291,6 +291,29 @@ function plot_hydro_balance(model)
     end
 end
 
+function plot_unit_commitment(model)
+    p_dict = define_parameters()
+    T = p_dict["T"]
+    thermal_uc = value.(model[:status])
+
+    for a in p_dict["A"]
+        df = DataFrame()
+        peak = zeros(size(thermal_uc, 2))
+        for p in p_dict["P_a"][a]
+            # if !(p in p_dict["P_t"]) 
+            #     continue
+            # end
+            uc = collect(thermal_uc[p, :])
+            if sum(uc) != 0
+                df[!, "$p"] = uc + peak
+                peak .+= uc
+            end
+        end
+        if ncol(df) > 0
+            plot_all_columns_df(df, "Discrete model, unit commitment, area $a", "discrete_uc_area$a.png", true)
+        end
+    end
+end
 
 # p_max = get_power_plant_data()
 # println(p_max)
@@ -298,6 +321,6 @@ end
 
 model = define_model()
 print_simple_results(model)
-plot_hydro_balance(model)
+# plot_hydro_balance(model)
 plot_energy_balance(model)
-
+plot_unit_commitment(model)

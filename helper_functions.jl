@@ -3,9 +3,14 @@ using DataFrames
 using JuMP
 
 
-function plot_all_columns_df(df, title, filename) 
+function plot_all_columns_df(df, title, filename, y_lim=false)
+     
     index_values = 1:nrow(df)
-    a = plot(title=title)
+    if y_lim
+        a = plot(title=title, ylim =(0, :auto))
+    else
+        a = plot(title=title)
+    end
     for col in names(df)
         plot!(index_values, df[:, col], label=col, legend=:outertopright)
     end
@@ -50,7 +55,7 @@ end
 
 
 function get_load(areas, timesteps)
-    file_path = "consumption.xlsx"
+    file_path = "input/consumption.xlsx"
     xf = XLSX.readxlsx(file_path)
     sh = xf["Sheet1"]
     demand = sh[2:end, 3]
@@ -67,7 +72,7 @@ end
 
 
 function add_power_plant_data!(data_dict)
-    df = CSV.read("gen.csv", DataFrame)
+    df = CSV.read("input/gen.csv", DataFrame)
 
     gen_ub_array = df[:, "PMax MW"]
     gen_ub_dict = Dict(i => v for (i, v) in enumerate(gen_ub_array))

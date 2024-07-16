@@ -135,7 +135,7 @@ function find_and_write_demand_weights(bernstein_degree, time_steps, areas)
         weights_df = vcat(weights_df, df)
         # df = round.(df, digits=2)
     end
-    CSV.write("load_weights.csv", weights_df)
+    CSV.write("input/load_weights.csv", weights_df)
 end
 
 function find_and_write_inflow_weights(bernstein_degree, time_steps)
@@ -150,19 +150,19 @@ function find_and_write_inflow_weights(bernstein_degree, time_steps)
         df = round.(df, digits = 1)
         weights_df = vcat(weights_df, df)
     end
-    CSV.write("inflow_weights.csv", weights_df)
+    CSV.write("input/inflow_weights.csv", weights_df)
 end
 
 
 
 function find_and_write_capacity_weights(bernstein_degree, n_power_plants)
-    file_path = "max_production.csv"
+    file_path = "input/max_production.csv"
     # capacity = [1, 2, 3, 4, 5]
     capacity = [c for c in 1:n_power_plants]
     parameters = define_parameters(capacity, bernstein_degree, 100)
     df = define_problem(parameters)
     df = round.(df, digits=2)
-    CSV.write("capacity_weights.csv", df)
+    CSV.write("input/capacity_weights.csv", df)
 end
 
 

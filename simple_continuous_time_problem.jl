@@ -12,7 +12,7 @@ include("C:/Users/vegardvk/vscodeProjects/bernstein/helper_functions.jl")
 
 
 function define_parameters(bernstein_degree, time_steps, power_plants, sampling_points, areas)
-    demand_weights_df = CSV.read("load_weights.csv", DataFrame)
+    demand_weights_df = CSV.read("input/load_weights.csv", DataFrame)
     demand_array = zeros(bernstein_degree + 1, areas, time_steps)
     for a in 1:areas
         demand_array[:, a, :] .= demand_weights_df[(1+(a - 1)*(bernstein_degree + 1)):a*(bernstein_degree+1), :]
@@ -384,6 +384,30 @@ function print_simple_results(model, bernstein_degree, time_steps, nP, sampling_
 
 end
 
+function plot_unit_commitment(model)
+    p_dict = define_parameters()
+    T = p_dict["T"]
+    thermal_uc = value.(model[:status])
+
+    for a in p_dict["A"]
+        df = DataFrame()
+        peak = zeros(size(thermal_uc, 2))
+        for p in p_dict["P_a"][a]
+            if !(p in p_dict["P_t"]) 
+                continue
+            end
+            uc = collect(thermal_uc[p, :])
+            if sum(uc) != 0
+                df[!, "$p"] = uc + peak
+                peak .+= uc
+            end
+        end
+        if ncol(df) > 0
+            plot_all_columns_df(df, "Continuous model, unit commitment, area $a", "continous_uc_area$a.png", true)
+        end
+    end
+end
+
 function main()
     nT = 24
     nB = 3
@@ -396,9 +420,10 @@ function main()
     # find_and_write_capacity_weights(1, nP)
 
     model, p_dict = define_model(nB, nT, nP, sampling_points, nA)
-    plot_model_results(model, p_dict)
+    # plot_model_results(model, p_dict)
 
     # print_simple_results(model, nB, nT, nP, sampling_points, nA)
-    plot_hydro_balance(model, nB, nT, nP, sampling_points, nA)
+    # plot_hydro_balance(model, nB, nT, nP, sampling_points, nA)
+    plot_unit_commitment(model)
 end
 main()
