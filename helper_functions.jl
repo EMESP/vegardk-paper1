@@ -70,9 +70,37 @@ function get_load(areas, timesteps)
     return df
 end
 
+function get_wind_ts()
+    file_path = "input/DAY_AHEAD_wind.csv"
+    df = CSV.read(file_path, DataFrame)
+    return df 
+end
 
 function add_power_plant_data!(data_dict)
     df = CSV.read("input/gen.csv", DataFrame)
+    df[!, :gen_index] = 1:nrow(df)
+
+    wind_df = filter(row -> row.Category == "Wind", df)
+    P_w = wind_df[:, "gen_index"]
+    data_dict["P_w"] = P_w
+    P_t = 1:10
+    P_a = Dict(
+        1 => P_t,
+        2 => P_w,
+        # 3 => [i for i in 21:30],
+    )
+    data_dict["P_t"] = P_t
+
+    wind_ts_df = get_wind_ts()
+    name_mapping = Dict(Symbol(wind_df[!, "GEN UID"][i]) .=> Symbol(wind_df[!, "gen_index"][i]) for i in 1:nrow(wind_df))
+    rename!(wind_ts_df, name_mapping)
+    data_dict["wind_ts"] = wind_ts_df
+
+    # wind_ts_new = DataFrame()
+    # for (name, col) in pairs(wind_ts)
+    #     index = findfirst(row -> row[:GenUID] == name, eachrow(wind_df))
+    #     wind_ts_new_df[!, index] = wind_df
+    # end
 
     gen_ub_array = df[:, "PMax MW"]
     gen_ub_dict = Dict(i => v for (i, v) in enumerate(gen_ub_array))
@@ -87,6 +115,7 @@ function add_power_plant_data!(data_dict)
     data_dict["gen_ub"] = gen_ub_dict
     data_dict["gen_lb"] = gen_lb_dict
     data_dict["fuel_price"] = fuel_price_dict
+    data_dict["P_a"] = P_a
 
     p_max = df[:, "PMax MW"]
     p_min = df[:, "PMin MW"]
@@ -129,8 +158,10 @@ function get_module_data!(data_dict)
     # P = vcat(data_dict["P_t"], P_h)
 
     df[!, "P_h"] = df[!, "modnr"]
-    data_dict["P"] = vcat(1:20, df[!, "P_h"])
+    data_dict["P"] = vcat(data_dict["P_t"], data_dict["P_w"], df[!, "P_h"])
     data_dict["P_h"] = df[!, "modnr"]
+    data_dict["P_a"][3] = data_dict["P_h"]
+    # parameter_dict["P_a"][3] = parameter_dict["P_h"]
 
     key_list = ["enekv", "kap_spill", "kap_forb", "kap_mag", "kap_gen", "tilsig_reg", "tilsig_ureg", "topo_flom", "topo_forb", "topo_gen", "starting_reservoir", "end_wv"]
     for key in key_list
@@ -152,6 +183,7 @@ function get_module_data!(data_dict)
     end
     find_connected_plants!(data_dict, df)
     add_dummy_hydro_parameters!(data_dict, df)
+
 end
 
 function find_connected_plants!(data_dict, df)
@@ -174,9 +206,9 @@ function add_dummy_hydro_parameters!(data_dict, df)
     for p in data_dict["P_h"]
         row_index = findfirst(df.P_h .== p)
         if p == 49927
-            data_dict["starting_reservoir"][p] = df[row_index, "kap_mag"]*0.99
+            data_dict["starting_reservoir"][p] = df[row_index, "kap_mag"]*0.5
         else
-            data_dict["starting_reservoir"][p] = df[row_index, "kap_mag"]*0.99
+            data_dict["starting_reservoir"][p] = df[row_index, "kap_mag"]*0.5
         end
         data_dict["fuel_price"][p] = 0
     end
@@ -198,9 +230,9 @@ function get_inflow(timesteps)
     for p in plants
         if data["kap_mag"][p] > 0
             if p == 49927
-                df[!, "$p"] = [500 for t in 1:timesteps]
+                df[!, "$p"] = [0 for t in 1:timesteps]
             else
-                df[!, "$p"] = [500 for t in 1:timesteps]
+                df[!, "$p"] = [0 for t in 1:timesteps]
             end
         else
             df[!, "$p"] = [0 for t in 1:timesteps]

@@ -20,12 +20,6 @@ function define_parameters()
 
     n_areas = 3
 
-    P_a = Dict(
-        1 => [i for i in 1:10],
-        2 => [i for i in 11:20],
-        # 3 => [i for i in 21:30],
-    )
-    P_t = 1:20
     L_in = Dict(
         1 => [],
         2 => [1],
@@ -51,8 +45,8 @@ function define_parameters()
     parameter_dict = Dict(
         "L_in" => L_in,
         "L_out" => L_out,
-        "P_a" => P_a,
-        "P_t" => P_t,
+        # "P_a" => P_a,
+        # "P_t" => P_t,
         "cap_line" => cap_line,
         "load" => load_df,
         "inflow" => inflow_df,
@@ -71,7 +65,6 @@ function define_parameters()
 
     add_power_plant_data!(parameter_dict)
     get_module_data!(parameter_dict)
-    parameter_dict["P_a"][3] = parameter_dict["P_h"]
     return parameter_dict
 end
 
@@ -85,6 +78,7 @@ function define_model()
     A = p_dict["A"]
     P_h = p_dict["P_h"]# Set of hydropower plants, subset of p
     P_t = p_dict["P_t"]
+    P_w = p_dict["P_w"]
     I_bypass = p_dict["I_bypass"] # Dictionary where I_bypass[p] gives set of powerplants that bypass into p
     I_disch = p_dict["I_disch"]
     I_spill = p_dict["I_spill"]
@@ -112,6 +106,7 @@ function define_model()
     @variable(model, status[p in P, t in T], Bin)
     @variable(model, startup[p in P, t in T], Bin)
     @constraint(model, gen_ub[p in P, t in T], production[p, t] ≤ p_dict["gen_ub"][p]*status[p, t])
+    @constraint(model, wind_prod[p in P_w, t in T], production[p, t] == p_dict["wind_ts"][t, "$p"]/10)
     @constraint(model, gen_lb[p in P, t in T], production[p, t] ≥ p_dict["gen_lb"][p]*status[p, t])
     @constraint(model, gen_on_off[p in P, t in T[2:end]], startup[p, t] ≥ status[p, t] - status[p, t-1])
 
