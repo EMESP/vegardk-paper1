@@ -70,13 +70,21 @@ function get_load(areas, timesteps)
     return df
 end
 
-function get_wind_ts()
+function get_wind_ts(year=2020, month=1, day=1)
     file_path = "input/DAY_AHEAD_wind.csv"
     df = CSV.read(file_path, DataFrame)
-    return df 
+    filtered_df = subset(df, :Year => ByRow(==(year)), :Month => ByRow(==(month)), :Day => ByRow(==(day)))
+    select!(filtered_df, Not([:Year, :Month, :Day, :Period]))
+    multiplier = 0.3
+    filtered_df .= filtered_df .*multiplier
+    return filtered_df 
 end
 
 function add_power_plant_data!(data_dict)
+    data_dict["C_shedding"] = 1000
+    data_dict["C_dumping"] = 10
+    data_dict["C_startup"] = 100
+
     df = CSV.read("input/gen.csv", DataFrame)
     df[!, :gen_index] = 1:nrow(df)
 
@@ -123,7 +131,6 @@ function add_power_plant_data!(data_dict)
     min_down_time = df[:, "Min Down Time Hr"]
     min_up_time = df[:, "Min Up Time Hr"]
     fuel_price = df[:, "Fuel Price \$/MMBTU"]
-    a = 3
     return data_dict
 end
 

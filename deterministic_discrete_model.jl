@@ -31,9 +31,9 @@ function define_parameters()
         3 => []
     )
     C = Dict(1 => 1, 2 => 2, 3=> 3, 4=> 1000)
-    C_shedding = 10000
-    C_dumping = 100
-    C_startup = 100
+    # C_shedding = 10000
+    # C_dumping = 100
+    # C_startup = 100
 
     cap_line = Dict(
         1 => 50,
@@ -58,9 +58,9 @@ function define_parameters()
         "L" => L,
         "T" => T,
         "A" => A,
-        "C_shedding" => C_shedding,
-        "C_dumping" => C_dumping,
-        "C_startup" => C_startup,
+        # "C_shedding" => C_shedding,
+        # "C_dumping" => C_dumping,
+        # "C_startup" => C_startup,
     )
 
     add_power_plant_data!(parameter_dict)
@@ -106,7 +106,7 @@ function define_model()
     @variable(model, status[p in P, t in T], Bin)
     @variable(model, startup[p in P, t in T], Bin)
     @constraint(model, gen_ub[p in P, t in T], production[p, t] ≤ p_dict["gen_ub"][p]*status[p, t])
-    @constraint(model, wind_prod[p in P_w, t in T], production[p, t] == p_dict["wind_ts"][t, "$p"]/10)
+    @constraint(model, wind_prod[p in P_w, t in T], production[p, t] == p_dict["wind_ts"][t, "$p"])
     @constraint(model, gen_lb[p in P, t in T], production[p, t] ≥ p_dict["gen_lb"][p]*status[p, t])
     @constraint(model, gen_on_off[p in P, t in T[2:end]], startup[p, t] ≥ status[p, t] - status[p, t-1])
 

@@ -18,15 +18,6 @@ function define_parameters(bernstein_degree, time_steps, power_plants, sampling_
         demand_array[:, a, :] .= demand_weights_df[(1+(a - 1)*(bernstein_degree + 1)):a*(bernstein_degree+1), :]
     end
 
-
-
-    P_a = Dict(
-        1 => [i for i in 1:10],
-        2 => [i for i in 11:20],
-        # 3 => [i for i in 11:15],
-    )
-    P_t = 1:20
-
     L_in = Dict(
         1 => [],
         2 => [1],
@@ -42,26 +33,23 @@ function define_parameters(bernstein_degree, time_steps, power_plants, sampling_
         2 => 50,
         3 => 50
     )
-    C_shedding = 10000
-    C_dumping = 10
-    C_startup = 100
 
     data = Dict(
         # "nP" => power_plants,
         "nB" => bernstein_degree,
         "nT" => time_steps,
         "nA" => areas,
-        "P_a" => P_a,
-        "P_t" => P_t,
+        # "P_a" => P_a,
+        # "P_t" => P_t,
         "cap_line" => cap_line,
         "L" => 3,
         "L_in" => L_in,
         "L_out" => L_out,
         "sampling_points" => sampling_points,
         # "C" => Dict(1 => 1, 2 => 2, 3=> 999, 4=> 1000),
-        "C_shedding" => C_shedding,
-        "C_dumping" => C_dumping,
-        "C_startup" => C_startup,
+        # "C_shedding" => C_shedding,
+        # "C_dumping" => C_dumping,
+        # "C_startup" => C_startup,
 
         # "P_max" => Dict(1 => 1, 2 => 1, 3=> 1000),
         "demand_weights" => demand_array[:, :, :],
@@ -69,19 +57,25 @@ function define_parameters(bernstein_degree, time_steps, power_plants, sampling_
 
     add_power_plant_data!(data)
     get_module_data!(data)
-    data["P_a"][3] = data["P_h"]
+    # data["P_a"][3] = data["P_h"]
 
-    inflow_weights_df = CSV.read("inflow_weights.csv", DataFrame)
-    plants = data["P_h"]
-    plants = sort(plants)
+    inflow_weights_df = CSV.read("input/inflow_weights.csv", DataFrame)
+    hydro_plants = data["P_h"]
+    hydro_plants = sort(hydro_plants)
     inflow_dict = Dict()
-    inflow_array = zeros(length(plants), bernstein_degree + 1, time_steps)
-    for (count, p) in enumerate(plants)
+    for (count, p) in enumerate(hydro_plants)
         inflow_dict[p] = inflow_weights_df[(1+(count - 1)*(bernstein_degree + 1)):count*(bernstein_degree+1), :]
-        # inflow_array[p, :, :] .= inflow_weights_df[(1+(p - 1)*(bernstein_degree + 1)):p*(bernstein_degree+1), :]
     end
     data["inflow_weights"] = inflow_dict
 
+    wind_weights_df = CSV.read("input/wind_ts_weights.csv", DataFrame)
+    wind_plants = data["P_w"]
+    # wind_plants = sort(wind_plants)
+    wind_dict = Dict()
+    for (count, p) in enumerate(wind_plants)
+        wind_dict[p] = wind_weights_df[(1+(count-1)*(bernstein_degree+1)):count*(bernstein_degree+1), :]
+    end
+    data["wind_weights"] = wind_dict
     return data
 end
 
@@ -95,6 +89,7 @@ function define_model(bernstein_degree, time_steps, nP, sampling_points, areas)
     P = p_dict["P"]
     P_h = p_dict["P_h"]
     P_t = p_dict["P_t"]
+    P_w = p_dict["P_w"]
 
     P_a = p_dict["P_a"]
     B = 0:p_dict["nB"]
@@ -123,6 +118,8 @@ function define_model(bernstein_degree, time_steps, nP, sampling_points, areas)
     @variable(model, net_inflow[p in P_h, b in B, t in T])
     @variable(model, volume_end[p in P_h, t in 0:T[end]] ≥ 0)
     @variable(model, volume[p in P_h, b in B_I, t in T])
+
+    @constraint(model, wind_production[p in P_w, b in B, t in T], prod[p, b, t] == p_dict["wind_weights"][p][b+1, t])
 
     @constraint(model, controlled_inflow[p in P_h, b in B, t in T], total_flow_in[p, b, t] == sum(flow_disch[i, b, t] for i in I_disch[p]) 
                                                                                             + sum(flow_bypass[i, b, t] for i in I_bypass[p]) 
@@ -178,7 +175,8 @@ function define_model(bernstein_degree, time_steps, nP, sampling_points, areas)
                 == p_dict["demand_weights"][b+1, a, t])
     # @constraint(model, min_production[p in P, b in B, t in T], prod[p, b, t] >= 0)
 
-    @constraint(model, max_production[p in P, t in T, b in B], prod[p, b, t]  <=  p_dict["gen_ub"][p])
+    # @constraint(model, max_production[p in P, t in T, b in B], prod[p, b, t]  <=  p_dict["gen_ub"][p])
+    @constraint(model, max_production[p in union(P_t, P_h), t in T, b in B], prod[p, b, t]  <=  p_dict["gen_ub"][p])
     @constraint(model, max_transmission[l in L, b in B, t in T], transmission[l, b, t] ≤ p_dict["cap_line"][l])
     @constraint(model, min_transmission[l in L, b in B, t in T], transmission[l, b, t] ≥ -p_dict["cap_line"][l])
 
@@ -238,6 +236,7 @@ function plot_model_results(model, p_dict)
             temp_df[!, "Import"] .-= [max(0, val) for val in line_dict[l]]
         end
         df[!, "Net position"] = temp_df[!, :Export] - temp_df[!, :Import]
+        
         # demand_df = p_dict["demand_weights"]
         # demand_array = get_converted_list(demand_df, sampling_points)
         # df[!, "Demand"] = demand_array
@@ -413,17 +412,19 @@ function main()
     nB = 3
     nP = 15
     nA = 3
+    nW = 4
     sampling_points = 10
 
     # find_and_write_demand_weights(nB, nT, nA)
-    find_and_write_inflow_weights(nB, nT)
+    # find_and_write_inflow_weights(nB, nT)
     # find_and_write_capacity_weights(1, nP)
+    find_and_write_wind_weights(nB, nT)
 
     model, p_dict = define_model(nB, nT, nP, sampling_points, nA)
-    # plot_model_results(model, p_dict)
+    plot_model_results(model, p_dict)
 
-    # print_simple_results(model, nB, nT, nP, sampling_points, nA)
+    print_simple_results(model, nB, nT, nP, sampling_points, nA)
     # plot_hydro_balance(model, nB, nT, nP, sampling_points, nA)
-    plot_unit_commitment(model)
+    # plot_unit_commitment(model)
 end
 main()

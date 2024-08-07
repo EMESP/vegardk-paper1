@@ -165,6 +165,20 @@ function find_and_write_capacity_weights(bernstein_degree, n_power_plants)
     CSV.write("input/capacity_weights.csv", df)
 end
 
+function find_and_write_wind_weights(bernstein_degree, time_steps)
+    wind_ts_df = get_wind_ts()
+    weights_df = DataFrame()
+    plants = names(wind_ts_df) # Rekkefølgen på tidsseriene blir kanskje ikke riktig. Vurder å sorter dem + sorter ved lesing og kobling senere
+    for p in plants
+        wind_ts = wind_ts_df[1:time_steps, "$p"]
+        parameters = define_parameters(wind_ts, bernstein_degree, 100)
+        df = define_problem(parameters)
+        df = round.(df, digits = 2)
+        weights_df = vcat(weights_df, df)
+    end
+    CSV.write("input/wind_ts_weights.csv", weights_df)
+end
+
 
 nB = 3
 # find_and_write_demand_weights(nB)
