@@ -10,7 +10,7 @@ using MathOptInterface
 # const MOI = MathOptInterface
 
 include("C:/Users/vegardvk/vscodeProjects/bernstein/helper_functions.jl")
-
+include("C:/Users/vegardvk/vscodeProjects/bernstein/write_discrete_results_to_file.jl")
 
 function define_parameters()
     P = 1:20
@@ -45,22 +45,13 @@ function define_parameters()
     parameter_dict = Dict(
         "L_in" => L_in,
         "L_out" => L_out,
-        # "P_a" => P_a,
-        # "P_t" => P_t,
         "cap_line" => cap_line,
         "load" => load_df,
         "inflow" => inflow_df,
-        # "power_plant_df" => power_plant_df,
-        # "gen_ub" => gen_ub_dict,
-        # "gen_lb" => gen_lb_dict,
-        # "fuel_price" => fuel_price_dict,
         "P" => P,
         "L" => L,
         "T" => T,
         "A" => A,
-        # "C_shedding" => C_shedding,
-        # "C_dumping" => C_dumping,
-        # "C_startup" => C_startup,
     )
 
     add_power_plant_data!(parameter_dict)
@@ -151,7 +142,7 @@ function define_model()
 
     # println(objective_value(model))
 
-    return model
+    return model, p_dict
 end
 
 function print_simple_results(model)
@@ -314,8 +305,9 @@ end
 # println(p_max)
 # p_dict = define_parameters()
 
-model = define_model()
-print_simple_results(model)
+model, data = define_model()
+write_output_to_file(model, data)
+# print_simple_results(model)
 # plot_hydro_balance(model)
-plot_energy_balance(model)
-plot_unit_commitment(model)
+# plot_energy_balance(model)
+# plot_unit_commitment(model)
