@@ -106,17 +106,19 @@ function define_and_solve_model()
     @constraint(model, unit_commitment1a[p in P_t, t in T], prod[p, 0, t] ≤ plant_df[plant_df.plant_id .== p, :gen_ub][1] * status[p, t])
     @constraint(model, unit_commitment1b[p in P_t, t in T], prod[p, 0, t] ≥ plant_df[plant_df.plant_id .== p, :gen_lb][1] * status[p, t])
 
-    @constraint(model, unit_commitment2a[p in P_t, t in T], prod[p, B[end], t] ≤ plant_df[plant_df.plant_id .== p, :gen_ub][1] * status[p, t+1])
-    @constraint(model, unit_commitment2b[p in P_t, t in T], prod[p, B[end], t] ≥ plant_df[plant_df.plant_id .== p, :gen_lb][1] * status[p, t+1])
+    # @constraint(model, unit_commitment2a[p in P_t, t in T], prod[p, B[end], t] ≤ plant_df[plant_df.plant_id .== p, :gen_ub][1] * status[p, t+1])
+    # @constraint(model, unit_commitment2b[p in P_t, t in T], prod[p, B[end], t] ≥ plant_df[plant_df.plant_id .== p, :gen_lb][1] * status[p, t+1])
 
-    @constraint(model, unit_commitment3a[p in P_t, t in T], prod[p, 1, t] ≤ plant_df[plant_df.plant_id .== p, :gen_ub][1] * status[p, t])
-    @constraint(model, unit_commitment3b[p in P_t, t in T], prod[p, 1, t] ≥ plant_df[plant_df.plant_id .== p, :gen_lb][1] * status[p, t])
+    # @constraint(model, unit_commitment3a[p in P_t, t in T], prod[p, 1, t] ≤ plant_df[plant_df.plant_id .== p, :gen_ub][1] * status[p, t])
+    # @constraint(model, unit_commitment3b[p in P_t, t in T], prod[p, 1, t] ≥ plant_df[plant_df.plant_id .== p, :gen_lb][1] * status[p, t])
 
-    @constraint(model, unit_commitment4a[p in P_t, t in T], prod[p, B[end]-1, t] ≤ plant_df[plant_df.plant_id .== p, :gen_ub][1] * status[p, t+1])
-    @constraint(model, unit_commitment4b[p in P_t, t in T], prod[p, B[end]-1, t] ≥ plant_df[plant_df.plant_id .== p, :gen_lb][1] * status[p, t+1])
+    # @constraint(model, unit_commitment4a[p in P_t, t in T], prod[p, B[end]-1, t] ≤ plant_df[plant_df.plant_id .== p, :gen_ub][1] * status[p, t+1])
+    # @constraint(model, unit_commitment4b[p in P_t, t in T], prod[p, B[end]-1, t] ≥ plant_df[plant_df.plant_id .== p, :gen_lb][1] * status[p, t+1])
 
-    @constraint(model, continuity_constraint1[p in P_t, t in T[1:end-1]], prod[p, B[end], t] == prod[p, 0, t+1])
-    @constraint(model, continuity_constraint2[p in P_t, t in T[1:end-1]], prod[p, B[end], t] - prod[p, B[end]-1, t] == prod[p, 1, t+1] - prod[p, 0, t+1])
+    @constraint(model, enforce_discrete[p in union(P_t, P_h), t in T, b in B[1:end-1]], prod[p, b, t] .== prod[p, b+1, t])
+
+    # @constraint(model, continuity_constraint1[p in P_t, t in T[1:end-1]], prod[p, B[end], t] == prod[p, 0, t+1])
+    # @constraint(model, continuity_constraint2[p in P_t, t in T[1:end-1]], prod[p, B[end], t] - prod[p, B[end]-1, t] == prod[p, 1, t+1] - prod[p, 0, t+1])
 
 
     @variable(model, frequency[i in B, t in T])
@@ -126,8 +128,8 @@ function define_and_solve_model()
 
     @constraint(model, frequency_differentiated[i in B_D, t in T], frequency_d[i, t] .== sum(frequency[j, t] * k_matrix[j+1, i+1] for j in B))
     @constraint(model, frequency_continuous[t in T[1:end-1]], frequency[B[end], t] == frequency[0, t+1])
-    @constraint(model, freqency_ub[b in B, t in T], frequency[b, t] ≤ 2)
-    @constraint(model, frequency_lb[b in B, t in T], frequency[b, t] ≥ -2)
+    # @constraint(model, freqency_ub[b in B, t in T], frequency[b, t] ≤ 2)
+    # @constraint(model, frequency_lb[b in B, t in T], frequency[b, t] ≥ -2)
 
     @constraint(model, frequency_pos_lb[b in B, t in T], frequency_pos[b, t] ≥ frequency[b, t])
     @constraint(model, frequency_neg_ub[b in B, t in T], frequency_neg[b, t] ≤ frequency[b , t])
@@ -153,8 +155,7 @@ function define_and_solve_model()
     # @constraint(model, min_transmission[l in L, b in B, t in T], transmission[l, b, t] ≥ -line_df[line_df.line_id .== l, :capacity][1])
 
     # @objective(model, Min, sum(prod[p, b, t] * get_bernstein_val(bernstein_degree, b, s/sampling_points) * p_dict["C"][p] for p in P for b in B for t in T for s in 0:sampling_points))
-    @objective(model, Min, 
-                1/(B[end]+1) * Δt * (sum(prod[p, b, t] * plant_df[plant_df.plant_id .== p, :fuel_price][1]  for p in P_t for b in B for t in T)
+    @objective(model, Min, 1/(B[end]+1) * Δt * (sum(prod[p, b, t] * plant_df[plant_df.plant_id .== p, :fuel_price][1]  for p in P_t for b in B for t in T)
                 + sum(shedding[b, a, t] * C_shedding + dumping[b, a, t] * C_dumping for b in B for a in A for t in T)
                 + M_eff * sum(frequency_pos[b, t] * maximum(plant_df[:, :fuel_price]) for b in B for t in T)
                 - M_eff * sum(frequency_neg[b, t] * maximum(plant_df[:, :fuel_price]) for b in B for t in T))
@@ -164,5 +165,10 @@ function define_and_solve_model()
     return model
 
 end
+
+
+# model = define_and_solve_model()
+# write_results(model)
+# calculate_objective_components_continuous()
 
 

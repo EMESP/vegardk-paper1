@@ -41,10 +41,10 @@ end
 
 function define_and_solve_model()
     wind_df, hydro_df, inflow_df, load_df, plant_df, line_df, A, P, T, L, P_w, P_t, P_h, P_a, L_in, L_out, I_disch, I_spill, I_bypass, C_shedding, C_dumping, C_startup = read_input_data()
-
+    Δt = 24/T[end]
+    
     model = Model()
     set_optimizer(model, CPLEX.Optimizer)
-
     @variable(model, production[p in P, t in T] >= 0)
     @variable(model, load_shedding[a in A, t in T] >= 0)
     @variable(model, power_dumping[a in A, t in T] >= 0)
@@ -79,7 +79,7 @@ function define_and_solve_model()
     @constraint(model, controlled_outflow[p in P_h, t in T], total_flow_out[p, t] == flow_disch[p, t] + flow_bypass[p, t] + flow_spill[p, t])
     @constraint(model, starting_reservoir_constraint[p in P_h], volume[p, 0] == hydro_df[hydro_df.plant_id .== p, :starting_reservoir][1])
 
-    @constraint(model, reservoir_balance[p in P_h, t in 1:(T[end])], volume[p, t] - volume[p, t-1] == total_flow_in[p, t] - total_flow_out[p, t])
+    @constraint(model, reservoir_balance[p in P_h, t in 1:(T[end])], volume[p, t] - volume[p, t-1] == Δt * (total_flow_in[p, t] - total_flow_out[p, t]))
 
     @constraint(model, hydro_production[p in P_h, t in T], production[p, t] == hydro_df[hydro_df.plant_id .== p, :enekv][1] * flow_disch[p, t] * 3.6) # kwh/M3 * M3/s * 3600 s/h * 1/1000 MW/kW
     @constraint(model, vol_ub[p in P_h, t in T], volume[p, t] ≤ hydro_df[hydro_df.plant_id .== p, :kap_mag][1])
@@ -95,10 +95,10 @@ function define_and_solve_model()
                 - sum(transmission[l, t] for l in L_out[a]) 
                 == load_df[(load_df.area .== a) .& (load_df.timestep .== t), :Forbruk][1])
 
-    @objective(model, Min, sum(production[p, t] * plant_df[plant_df.plant_id .== p, :fuel_price][1] for p in P_t for t in T)
+    @objective(model, Min, Δt * sum(production[p, t] * plant_df[plant_df.plant_id .== p, :fuel_price][1] for p in P_t for t in T)
                     + sum((-volume[p, T[end]] + volume[p, 0]) * plant_df[plant_df.plant_id .== p, :fuel_price][1] for p in P_h) 
-                    + sum(load_shedding[a, t] * C_shedding for a in A for t in T) 
-                    + sum(power_dumping[a, t] * C_dumping for a in A for t in T)
+                    + Δt * sum(load_shedding[a, t] * C_shedding for a in A for t in T) 
+                    + Δt * sum(power_dumping[a, t] * C_dumping for a in A for t in T)
                     + sum(startup[p, t] * C_startup for p in P_t for t in T))
 
     # print_model_info(model)

@@ -18,6 +18,9 @@ function read_input_data()
     hydro_df = DataFrame(XLSX.readtable("output/hydro_data.xlsx", "Sheet1", infer_eltypes=true))
     inflow_df = DataFrame(XLSX.readtable("output/inflow_weights.xlsx", "Sheet1", infer_eltypes=true))
     load_df = DataFrame(XLSX.readtable("output/load_weights.xlsx", "Sheet1", infer_eltypes=true))
+    prod_df = DataFrame(XLSX.readtable("output/production_weights.xlsx", "Sheet1", infer_eltypes=true))
+    shedding_df = DataFrame(XLSX.readtable("output/shedding_weights.xlsx", "Sheet1", infer_eltypes=true))
+    dumping_df = DataFrame(XLSX.readtable("output/dumping_weights.xlsx", "Sheet1", infer_eltypes=true))
     plant_df = DataFrame(XLSX.readtable("output/plant_data.xlsx", "Sheet1", infer_eltypes=true))
     line_df = DataFrame(XLSX.readtable("output/line_data.xlsx", "Sheet1", infer_eltypes=true))
 
@@ -43,11 +46,11 @@ function read_input_data()
     I_disch, I_spill, I_bypass = find_connected_plants(hydro_df)
 
     C_shedding, C_dumping, C_startup = get_cost_parameters()
-    return wind_df, hydro_df, inflow_df, load_df, plant_df, line_df, A, P, T, L, B, P_w, P_t, P_h, P_a, L_in, L_out, I_disch, I_spill, I_bypass, C_shedding, C_dumping, C_startup
+    return wind_df, hydro_df, inflow_df, load_df, plant_df, line_df, A, P, T, L, B, P_w, P_t, P_h, P_a, L_in, L_out, I_disch, I_spill, I_bypass, C_shedding, C_dumping, C_startup, prod_df, shedding_df, dumping_df
 end
 
 function define_and_solve_model()
-    wind_df, hydro_df, inflow_df, load_df, plant_df, line_df, A, P, T, L, B, P_w, P_t, P_h, P_a, L_in, L_out, I_disch, I_spill, I_bypass, C_shedding, C_dumping, C_startup = read_input_data()
+    wind_df, hydro_df, inflow_df, load_df, plant_df, line_df, A, P, T, L, B, P_w, P_t, P_h, P_a, L_in, L_out, I_disch, I_spill, I_bypass, C_shedding, C_dumping, C_startup, prod_df, shedding_df, dumping_df = read_input_data()
     Δt = 24/T[end]
     
     B_I = 0:(B[end]+1)
@@ -59,11 +62,19 @@ function define_and_solve_model()
     model = Model()
     set_optimizer(model, CPLEX.Optimizer)
 
-    @variable(model, prod[p in P, b in B, t in T] ≥ 0)
+    @variable(model, prod[p in P, b in B, t in T])
     @variable(model, transmission[l in L, b in B, t in T])
 
     @variable(model, shedding[b in B, a in A, t in T] ≥ 0) 
     @variable(model, dumping[b in B, a in A, t in T] ≥ 0)
+
+
+    @constraint(model, prod_fix[p in union(P_t, P_h), b in B, t in T], 
+                        prod[p, b, t] == prod_df[(prod_df.plant_id .== p) .& (prod_df.timestep .== t) .& (prod_df.b .== b), :production][1])
+    # @constraint(model, load_shedding_fix[b in B, a in A, t in T], 
+    #                     shedding[b, a, t] == shedding_df[(shedding_df.area .== a) .& (shedding_df.timestep .== t) .& (shedding_df.b .== b), :load_shedding][1])
+    # @constraint(model, power_dumping_fix[b in B, a in A, t in T], 
+    #                     dumping[b, a, t] == dumping_df[(dumping_df.area .== a) .& (dumping_df.timestep .== t) .& (dumping_df.b .== b), :power_dumping][1])
 
     @variable(model, flow_disch[p in P_h, b in B, t in T] ≥ 0) # Antar at alle moduler bare har ett discharge-segment
     @variable(model, flow_bypass[p in P_h, b in B, t in T] ≥ 0)
@@ -84,9 +95,9 @@ function define_and_solve_model()
 
     @constraint(model, hydro_production[p in P_h, b in B, t in T], prod[p, b, t] == hydro_df[hydro_df.plant_id .== p, :enekv][1] * flow_disch[p, b, t] * 3.6)
 
-    @constraint(model, bypass_ub[p in P_h, b in B, t in T], flow_bypass[p, b, t] ≤ hydro_df[hydro_df.plant_id .== p, :kap_forb][1])
-    @constraint(model, prod_ub[p in P_h, b in B, t in T], flow_disch[p, b, t] ≤ hydro_df[hydro_df.plant_id .== p, :kap_gen_m3s][1])
-    @constraint(model, spill_ub[p in P_h, b in B, t in T], flow_spill[p, b, t] ≤ hydro_df[hydro_df.plant_id .== p, :kap_spill][1])
+    # @constraint(model, bypass_ub[p in P_h, b in B, t in T], flow_bypass[p, b, t] ≤ hydro_df[hydro_df.plant_id .== p, :kap_forb][1])
+    # @constraint(model, prod_ub[p in P_h, b in B, t in T], flow_disch[p, b, t] ≤ hydro_df[hydro_df.plant_id .== p, :kap_gen_m3s][1])
+    # @constraint(model, spill_ub[p in P_h, b in B, t in T], flow_spill[p, b, t] ≤ hydro_df[hydro_df.plant_id .== p, :kap_spill][1])
 
     @constraint(model, net_inflow_calculation[p in P_h, b in B, t in T], net_inflow[p, b, t] == total_flow_in[p, b, t] 
                                                                                                 + inflow_df[(inflow_df.plant_id .== p) .& (inflow_df.timestep .== t) .& (inflow_df.b .== b), :inflow][1] 
@@ -94,10 +105,10 @@ function define_and_solve_model()
 
     @constraint(model, starting_reservoir[p in P_h], volume_end[p, 0] == hydro_df[hydro_df.plant_id .== p, :starting_reservoir][1])
     @constraint(model, volume_calculation[p in P_h, t in T], volume_end[p, t] - volume_end[p, t-1] == Δt * (1/(B[end]+1)) * sum(net_inflow[p, b, t] for b in B))
-    @constraint(model, simple_vol_ub[p in P_h, t in T], volume_end[p, t] ≤ hydro_df[hydro_df.plant_id .== p, :kap_mag][1])
+    # @constraint(model, simple_vol_ub[p in P_h, t in T], volume_end[p, t] ≤ hydro_df[hydro_df.plant_id .== p, :kap_mag][1])
 
     @constraint(model, volume_weights[p in P_h, b in B_I, t in T], volume[p, b, t] == Δt * (1/(B[end]+1)) * sum(net_inflow[p, b2, t] for b2 in B[1:b]))
-    @constraint(model, volume_ub[p in P_h, b in B_I, t in T], volume_end[p, t-1] + volume[p, b, t] ≤ hydro_df[hydro_df.plant_id .== p, :kap_mag][1])
+    # @constraint(model, volume_ub[p in P_h, b in B_I, t in T], volume_end[p, t-1] + volume[p, b, t] ≤ hydro_df[hydro_df.plant_id .== p, :kap_mag][1])
 
     @variable(model, status[p in P, t in T_extended], Bin)
     @variable(model, startup[p in P, t in T_extended], Bin)
@@ -106,17 +117,18 @@ function define_and_solve_model()
     @constraint(model, unit_commitment1a[p in P_t, t in T], prod[p, 0, t] ≤ plant_df[plant_df.plant_id .== p, :gen_ub][1] * status[p, t])
     @constraint(model, unit_commitment1b[p in P_t, t in T], prod[p, 0, t] ≥ plant_df[plant_df.plant_id .== p, :gen_lb][1] * status[p, t])
 
-    @constraint(model, unit_commitment2a[p in P_t, t in T], prod[p, B[end], t] ≤ plant_df[plant_df.plant_id .== p, :gen_ub][1] * status[p, t+1])
-    @constraint(model, unit_commitment2b[p in P_t, t in T], prod[p, B[end], t] ≥ plant_df[plant_df.plant_id .== p, :gen_lb][1] * status[p, t+1])
+    # @constraint(model, unit_commitment2a[p in P_t, t in T], prod[p, B[end], t] ≤ plant_df[plant_df.plant_id .== p, :gen_ub][1] * status[p, t+1])
+    # @constraint(model, unit_commitment2b[p in P_t, t in T], prod[p, B[end], t] ≥ plant_df[plant_df.plant_id .== p, :gen_lb][1] * status[p, t+1])
 
-    @constraint(model, unit_commitment3a[p in P_t, t in T], prod[p, 1, t] ≤ plant_df[plant_df.plant_id .== p, :gen_ub][1] * status[p, t])
-    @constraint(model, unit_commitment3b[p in P_t, t in T], prod[p, 1, t] ≥ plant_df[plant_df.plant_id .== p, :gen_lb][1] * status[p, t])
+    # @constraint(model, unit_commitment3a[p in P_t, t in T], prod[p, 1, t] ≤ plant_df[plant_df.plant_id .== p, :gen_ub][1] * status[p, t])
+    # @constraint(model, unit_commitment3b[p in P_t, t in T], prod[p, 1, t] ≥ plant_df[plant_df.plant_id .== p, :gen_lb][1] * status[p, t])
 
-    @constraint(model, unit_commitment4a[p in P_t, t in T], prod[p, B[end]-1, t] ≤ plant_df[plant_df.plant_id .== p, :gen_ub][1] * status[p, t+1])
-    @constraint(model, unit_commitment4b[p in P_t, t in T], prod[p, B[end]-1, t] ≥ plant_df[plant_df.plant_id .== p, :gen_lb][1] * status[p, t+1])
+    # @constraint(model, unit_commitment4a[p in P_t, t in T], prod[p, B[end]-1, t] ≤ plant_df[plant_df.plant_id .== p, :gen_ub][1] * status[p, t+1])
+    # @constraint(model, unit_commitment4b[p in P_t, t in T], prod[p, B[end]-1, t] ≥ plant_df[plant_df.plant_id .== p, :gen_lb][1] * status[p, t+1])
 
-    @constraint(model, continuity_constraint1[p in P_t, t in T[1:end-1]], prod[p, B[end], t] == prod[p, 0, t+1])
-    @constraint(model, continuity_constraint2[p in P_t, t in T[1:end-1]], prod[p, B[end], t] - prod[p, B[end]-1, t] == prod[p, 1, t+1] - prod[p, 0, t+1])
+    # @constraint(model, continuity_constraint1[p in P_t, t in T[1:end-1]], prod[p, B[end], t] == prod[p, 0, t+1])
+    # @constraint(model, continuity_constraint2[p in P_t, t in T[1:end-1]], prod[p, B[end], t] - prod[p, B[end]-1, t] == prod[p, 1, t+1] - prod[p, 0, t+1])
+
 
 
     @variable(model, frequency[i in B, t in T])
@@ -125,9 +137,9 @@ function define_and_solve_model()
     @variable(model, frequency_d[i in B_D, t in T])
 
     @constraint(model, frequency_differentiated[i in B_D, t in T], frequency_d[i, t] .== sum(frequency[j, t] * k_matrix[j+1, i+1] for j in B))
-    @constraint(model, frequency_continuous[t in T[1:end-1]], frequency[B[end], t] == frequency[0, t+1])
-    @constraint(model, freqency_ub[b in B, t in T], frequency[b, t] ≤ 2)
-    @constraint(model, frequency_lb[b in B, t in T], frequency[b, t] ≥ -2)
+    # @constraint(model, frequency_continuous[t in T[1:end-1]], frequency[B[end], t] == frequency[0, t+1])
+    # @constraint(model, freqency_ub[b in B, t in T], frequency[b, t] ≤ 2)
+    # @constraint(model, frequency_lb[b in B, t in T], frequency[b, t] ≥ -2)
 
     @constraint(model, frequency_pos_lb[b in B, t in T], frequency_pos[b, t] ≥ frequency[b, t])
     @constraint(model, frequency_neg_ub[b in B, t in T], frequency_neg[b, t] ≤ frequency[b , t])
@@ -148,7 +160,8 @@ function define_and_solve_model()
 
     # @constraint(model, min_production[p in P, b in B, t in T], prod[p, b, t] >= 0)
 
-    @constraint(model, max_production[p in union(P_t, P_h), t in T, b in B], prod[p, b, t]  <=  plant_df[plant_df.plant_id .== p, :gen_ub][1])
+    # @constraint(model, max_production[p in union(P_t, P_h), t in T, b in B], prod[p, b, t]  <=  plant_df[plant_df.plant_id .== p, :gen_ub][1])
+
     @constraint(model, max_transmission[l in L, b in B, t in T], 0 ≤ transmission[l, b, t] ≤  line_df[line_df.line_id .== l, :capacity][1])
     # @constraint(model, min_transmission[l in L, b in B, t in T], transmission[l, b, t] ≥ -line_df[line_df.line_id .== l, :capacity][1])
 

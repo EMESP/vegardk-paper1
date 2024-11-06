@@ -66,7 +66,7 @@ end
 
 function get_cost_parameters()
     C_shedding = 1000
-    C_dumping = 10
+    C_dumping = 50
     C_startup = 100
     return C_shedding, C_dumping, C_startup
 end

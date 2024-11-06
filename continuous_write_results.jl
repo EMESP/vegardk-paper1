@@ -1,5 +1,8 @@
 using Statistics
 
+# include("C:/Users/vegardvk/vscodeProjects/bernstein/continuous_model.jl")
+
+
 function write_results(model)
     wind_df, hydro_df, inflow_df, load_df, plant_df, line_df, A, P, T, L, B, P_w, P_t, P_h, P_a, L_in, L_out, I_disch, I_spill, I_bypass, C_shedding, C_dumping, C_startup = read_input_data()
     sampling_points = 10

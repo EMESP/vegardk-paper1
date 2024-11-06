@@ -100,19 +100,24 @@ end
 
 function calculate_objective_components_discrete()
     prod_df, flow_df, area_df, hydro_df, line_df, A, P, T, L, L_in, L_out, P_a = import_data_discrete()
+    Δt = 24/T[end]
+
     plant_df = DataFrame(XLSX.readtable("output/plant_data.xlsx", "Sheet1", infer_eltypes=true))
     hydro_data_df = DataFrame(XLSX.readtable("output/hydro_data.xlsx", "Sheet1", infer_eltypes=true))
+
+    area_grouped_plants = groupby(plant_df, :area)
+    P_a = Dict(g.area[1] => unique(g.plant_id) for g in area_grouped_plants)
 
     C_shedding, C_dumping, C_startup = get_cost_parameters()
     P_t = unique(plant_df[plant_df.fuel_type .== "Thermal", :plant_id])
     P_h = unique(plant_df[plant_df.fuel_type .== "Hydro", :plant_id])
 
-    prod_df_wide = unstack(select(prod_df, :timestep, :production, :plant_id), :plant_id, :production)
+    # prod_df_wide = unstack(select(prod_df, :timestep, :production, :plant_id), :plant_id, :production)
 
-    fuel_costs = sum(prod_df[(prod_df.timestep .== t) .& (prod_df.plant_id .== p), :production][1] * plant_df[plant_df.plant_id .== p, :fuel_price][1] for p in P_t for t in T)
+    fuel_costs = Δt * sum(prod_df[(prod_df.timestep .== t) .& (prod_df.plant_id .== p), :production][1] * plant_df[plant_df.plant_id .== p, :fuel_price][1] for p in P_t for t in T)
     startup_costs = sum(prod_df[(prod_df.timestep .== t) .& (prod_df.plant_id .== p), :startup][1] * C_startup for p in P_t for t in T)
-    dumping_costs = sum(area_df[(area_df.area .== a) .& (area_df.timestep .== t), :power_dumping][1] * C_dumping for a in A for t in T)
-    shed_costs = sum(area_df[(area_df.area .== a) .& (area_df.timestep .== t), :load_shedding][1] * C_shedding for a in A for t in T)
+    dumping_costs = Δt * sum(area_df[(area_df.area .== a) .& (area_df.timestep .== t), :power_dumping][1] * C_dumping for a in A for t in T)
+    shed_costs = Δt * sum(area_df[(area_df.area .== a) .& (area_df.timestep .== t), :load_shedding][1] * C_shedding for a in A for t in T)
     volume_costs = sum((-hydro_df[(hydro_df.plant_id .== p) .& (hydro_df.timestep .== T[end]), :volume_res][1] + hydro_data_df[hydro_data_df.plant_id .== p, :starting_reservoir][1]) * plant_df[plant_df.plant_id .== p, :fuel_price][1] for p in P_h) 
     objective = fuel_costs + startup_costs + dumping_costs + shed_costs + volume_costs
 
@@ -122,44 +127,88 @@ function calculate_objective_components_discrete()
     println("\t Startup costs: $startup_costs")
     println("\t shed_costs: $shed_costs")
     println("\t dump costs: $dumping_costs")
+
+    df = DataFrame()
+    for a in A
+        shed_costs = Δt * sum(area_df[(area_df.area .== a) .& (area_df.timestep .== t), :load_shedding][1] * C_shedding for t in T)
+        dump_costs = Δt * sum(area_df[(area_df.area .== a) .& (area_df.timestep .== t), :power_dumping][1] * C_dumping for t in T)
+        
+        fuel_costs = 0
+        startup_costs = 0
+        water_costs = 0
+        for p in P_a[a]
+            if p in P_t
+                fuel_costs += Δt * sum(prod_df[(prod_df.timestep .== t) .& (prod_df.plant_id .== p), :production][1] * plant_df[plant_df.plant_id .== p, :fuel_price][1] for t in T)
+                startup_costs += sum(prod_df[(prod_df.timestep .== t) .& (prod_df.plant_id .== p), :startup][1] * C_startup for t in T)
+            elseif p in P_h
+                water_costs += (-hydro_df[(hydro_df.plant_id .== p) .& (hydro_df.timestep .== T[end]), :volume_res][1] 
+                    + hydro_data_df[hydro_data_df.plant_id .== p, :starting_reservoir][1]) * plant_df[plant_df.plant_id .== p, :fuel_price][1]
+            end
+        end
+        area_cost_df = DataFrame(
+            component = ["Fuel", "Shedding", "Dumping", "Water", "Start"],
+            values = [fuel_costs, shed_costs, dump_costs, water_costs, startup_costs],
+            area = a)
+        append!(df, area_cost_df)
+    end
+    CSV.write("discrete_results/discrete_objective.csv", df)
+
+
 end
 
 function calculate_objective_components_continuous()
     plant_df = DataFrame(XLSX.readtable("output/plant_data.xlsx", "Sheet1", infer_eltypes=true))
     hydro_data_df = DataFrame(XLSX.readtable("output/hydro_data.xlsx", "Sheet1", infer_eltypes=true))
-
     prod_weights_df, prod_aggregated_df, area_df, hydro_df, A, P, T, B = import_data_continuous()
+    Δt = 24/T[end]
+
+    area_grouped_plants = groupby(plant_df, :area)
+    P_a = Dict(g.area[1] => unique(g.plant_id) for g in area_grouped_plants)
 
     C_shedding, C_dumping, C_startup = get_cost_parameters()
     P_t = unique(plant_df[plant_df.fuel_type .== "Thermal", :plant_id])
     P_h = unique(plant_df[plant_df.fuel_type .== "Hydro", :plant_id])
 
-    fuel_costs = round(1/(B[end]+1) * sum(prod_weights_df[(prod_weights_df.timestep .== t) .& (prod_weights_df.plant_id .== p) .& (prod_weights_df.b .==b), :production][1] * plant_df[plant_df.plant_id .== p, :fuel_price][1]  for p in P_t for b in B for t in T), digits=2)
-    shed_costs =  round(1/(B[end]+1) * sum(area_df[(area_df.timestep .== t) .& (area_df.area .== a) .& (area_df.b .== b), :shedding][1] * C_shedding for b in B for a in A for t in T), digits=2)
-    dump_costs = round(1/(B[end]+1) * sum(area_df[(area_df.timestep .== t) .& (area_df.area .== a) .& (area_df.b .== b), :dumping][1] * C_dumping for b in B for a in A for t in T), digits=2)
+    fuel_costs = round(1/(B[end]+1) * Δt * sum(prod_weights_df[(prod_weights_df.timestep .== t) .& (prod_weights_df.plant_id .== p) .& (prod_weights_df.b .==b), :production][1] * plant_df[plant_df.plant_id .== p, :fuel_price][1]  for p in P_t for b in B for t in T), digits=2)
+    shed_costs =  round(1/(B[end]+1) * Δt * sum(area_df[(area_df.timestep .== t) .& (area_df.area .== a) .& (area_df.b .== b), :shedding][1] * C_shedding for b in B for a in A for t in T), digits=2)
+    dump_costs = round(1/(B[end]+1) * Δt * sum(area_df[(area_df.timestep .== t) .& (area_df.area .== a) .& (area_df.b .== b), :dumping][1] * C_dumping for b in B for a in A for t in T), digits=2)
     water_costs = round(sum((-hydro_df[(hydro_df.plant_id .== p) .& (hydro_df.timestep .== T[end]), :volume_res][1] + hydro_data_df[hydro_data_df.plant_id .== p, :starting_reservoir][1]) * plant_df[plant_df.plant_id .== p, :fuel_price][1] for p in P_h), digits=2)
     startup_costs = sum(prod_aggregated_df[(prod_aggregated_df.timestep .== t) .& (prod_aggregated_df.plant_id .== p), :startup][1] * C_startup for p in P_t for t in T)
     objective = fuel_costs + shed_costs + dump_costs + water_costs + startup_costs
-    
+
     println("Objective: $objective")
     println("\t Production costs: $fuel_costs")
     println("\t Water costs: $water_costs")
     println("\t shed_costs: $shed_costs")
     println("\t dump costs: $dump_costs")
     println("\t Startup costs: $startup_costs")
-    df = DataFrame(
-        component = ["Fuel", "Shedding", "Dumping", "Water", "Start"],
-        values = [fuel_costs, shed_costs, dump_costs, water_costs, startup_costs],
-        # Objective = objective,
-        # Fuel = fuel_costs,
-        # Shedding = shed_costs,
-        # Dumping = dump_costs,
-        # Water = water_costs,
-        # Start = startup_costs 
-    )
+
+    df = DataFrame()
+    for a in A
+        shed_costs = round(1/(B[end]+1) * Δt * sum(area_df[(area_df.timestep .== t) .& (area_df.area .== a) .& (area_df.b .== b), :shedding][1] * C_shedding for b in B for t in T), digits=2)
+        dump_costs = round(1/(B[end]+1) * Δt * sum(area_df[(area_df.timestep .== t) .& (area_df.area .== a) .& (area_df.b .== b), :dumping][1] * C_dumping for b in B for t in T), digits=2)
+        fuel_costs = 0
+        startup_costs = 0
+        water_costs = 0
+        for p in P_a[a]
+            if p in P_t
+                fuel_costs += round(1/(B[end]+1) * Δt * sum(prod_weights_df[(prod_weights_df.timestep .== t) .& (prod_weights_df.plant_id .== p) .& (prod_weights_df.b .==b), :production][1] * plant_df[plant_df.plant_id .== p, :fuel_price][1] for b in B for t in T), digits=2)
+                startup_costs += sum(prod_aggregated_df[(prod_aggregated_df.timestep .== t) .& (prod_aggregated_df.plant_id .== p), :startup][1] * C_startup for t in T)
+            elseif p in P_h
+                water_costs += round(
+                    (-hydro_df[(hydro_df.plant_id .== p) .& (hydro_df.timestep .== T[end]), :volume_res][1] + hydro_data_df[hydro_data_df.plant_id .== p, :starting_reservoir][1]) 
+                    * plant_df[plant_df.plant_id .== p, :fuel_price][1], digits=2)
+            end
+        end
+        area_cost_df = DataFrame(
+            component = ["Fuel", "Shedding", "Dumping", "Water", "Start"],
+            values = [fuel_costs, shed_costs, dump_costs, water_costs, startup_costs],
+            area = a)
+        append!(df, area_cost_df)
+    end
     display(df)
     # df = round.(df, digits=0)
-    CSV.write("continuous_results/objective.csv", df)
+    CSV.write("continuous_results/continuous_objective.csv", df)
 end
 
 # calculate_objective_components_discrete()

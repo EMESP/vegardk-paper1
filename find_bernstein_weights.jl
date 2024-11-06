@@ -9,7 +9,7 @@ using XLSX
 
 include("C:/Users/vegardvk/vscodeProjects/bernstein/helper_functions.jl")
 
-function define_problem(parameters)
+function define_problem(parameters, cont_constraints=true)
     B = parameters["B"]
     T = parameters["T"]
     S = parameters["S"]
@@ -22,9 +22,10 @@ function define_problem(parameters)
     @variable(model, deviation[s in S, t in T])
 
     @constraint(model, deviation_summation[s in S, t in T], deviation[s, t] == sum(parameters["bernstein_curves"][b+1, s+1] * weights[b, t] for b in B) - parameters["target_values"][s+1, t])
-    @constraint(model, continuity_constraint1[t in T[1:end-1]], weights[bernstein_degree, t] == weights[0, t+1])
-    @constraint(model, continuity_constraint2[t in T[1:end-1]], weights[bernstein_degree, t] - weights[bernstein_degree-1, t] == weights[1, t+1] - weights[0, t+1])
-
+    if cont_constraints
+        @constraint(model, continuity_constraint1[t in T[1:end-1]], weights[bernstein_degree, t] == weights[0, t+1])
+        @constraint(model, continuity_constraint2[t in T[1:end-1]], weights[bernstein_degree, t] - weights[bernstein_degree-1, t] == weights[1, t+1] - weights[0, t+1])
+    end
     
     @objective(model, Min, sum(deviation[s, t]^2 for s in S for t in T))
     optimize!(model)
@@ -135,6 +136,60 @@ function find_and_write_demand_weights(bernstein_degree)
     end
     weights_df.Forbruk = round.(weights_df.Forbruk, digits=2)
     XLSX.writetable("output/load_weights.xlsx", weights_df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
+end
+
+function find_and_write_shedding_weights(bernstein_degree, cont_constraints)
+    ts_df = DataFrame(XLSX.readtable("discrete_results/results.xlsx", "area_results", infer_eltypes=true))
+    weights_df = DataFrame()
+    A = unique(ts_df.area)
+    for a in A
+        area_ts_df = ts_df[ts_df.area .== a, :load_shedding]
+        parameters = define_parameters(area_ts_df, bernstein_degree, 100)
+        df = define_problem(parameters, cont_constraints)
+        df.b = 0:bernstein_degree
+        df_long = stack(df, Not(:b), variable_name="timestep", value_name="load_shedding")
+        df_long.timestep = parse.(Int, df_long.timestep)
+        df_long.area .= a
+        weights_df = vcat(weights_df, df_long)
+    end
+    weights_df.load_shedding = round.(weights_df.load_shedding, digits=2)
+    XLSX.writetable("output/shedding_weights.xlsx", weights_df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
+end
+
+function find_and_write_dumping_weights(bernstein_degree, cont_constraints)
+    ts_df = DataFrame(XLSX.readtable("discrete_results/results.xlsx", "area_results", infer_eltypes=true))
+    weights_df = DataFrame()
+    A = unique(ts_df.area)
+    for a in A
+        area_ts_df = ts_df[ts_df.area .== a, :power_dumping]
+        parameters = define_parameters(area_ts_df, bernstein_degree, 100)
+        df = define_problem(parameters, cont_constraints)
+        df.b = 0:bernstein_degree
+        df_long = stack(df, Not(:b), variable_name="timestep", value_name="power_dumping")
+        df_long.timestep = parse.(Int, df_long.timestep)
+        df_long.area .= a
+        weights_df = vcat(weights_df, df_long)
+    end
+    weights_df.power_dumping = round.(weights_df.power_dumping, digits=2)
+    XLSX.writetable("output/dumping_weights.xlsx", weights_df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
+end
+
+function find_and_write_production_weights(bernstein_degree, cont_constraints)
+    prod_df = DataFrame(XLSX.readtable("discrete_results/results.xlsx", "production", infer_eltypes=true))
+    weights_df = DataFrame()
+    P = unique(prod_df.plant_id)
+    for p in P
+        powerplant_prod = prod_df[prod_df.plant_id .== p, :production]
+        parameters = define_parameters(powerplant_prod, bernstein_degree, 100)
+        df = define_problem(parameters, cont_constraints)
+        df.b = 0:bernstein_degree
+        df_long = stack(df, Not(:b), variable_name="timestep", value_name="production")
+        df_long.timestep=parse.(Int, df_long.timestep)
+        df_long.plant_id .= p
+        weights_df = vcat(weights_df, df_long)
+    end
+    weights_df.production = round.(weights_df.production, digits=2)
+    XLSX.writetable("output/production_weights.xlsx", weights_df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
 end
 
 function find_and_write_wind_weights(bernstein_degree)
