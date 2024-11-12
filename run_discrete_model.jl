@@ -4,10 +4,11 @@ include("C:/Users/vegardvk/vscodeProjects/bernstein/plot_results.jl")
 
 
 steps_per_hour = 4
-process_wind_ts_data(steps_per_hour)
-process_load_data(steps_per_hour)
-process_plant_data(steps_per_hour)
+scenarios = 2
+process_wind_ts_data(steps_per_hour, scenarios)
+# process_load_data(steps_per_hour, 2)
+# process_plant_data(steps_per_hour)
 
-model = define_and_solve_model()
-write_results(model)
-calculate_objective_components_discrete()
+# model = define_and_solve_model()
+# write_results(model)
+# calculate_objective_components_discrete()

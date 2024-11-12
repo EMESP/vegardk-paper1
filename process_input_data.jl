@@ -3,7 +3,8 @@ using XLSX
 using CSV
 using Interpolations
 using Statistics
-
+using Random
+using Distributions
 
 include("C:/Users/vegardvk/vscodeProjects/bernstein/get_hydro_data.jl")
 
@@ -45,7 +46,7 @@ function process_plant_data(steps_per_hour)
     XLSX.writetable("output/plant_data.xlsx", output_df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
 end
 
-function process_wind_ts_data(steps_per_hour)
+function process_wind_ts_data(steps_per_hour, scenarios)
     input_df = CSV.read("input/gen.csv", DataFrame)
     input_df[!, :gen_index] = 1:nrow(input_df)
     wind_df = filter(row -> row.Category == "Wind", input_df)
@@ -54,22 +55,23 @@ function process_wind_ts_data(steps_per_hour)
     name_mapping = Dict(Symbol(wind_df[!, "GEN UID"][i]) .=> Symbol(wind_df[!, "gen_index"][i]) for i in 1:nrow(wind_df))
     rename!(wind_ts_df, name_mapping)
     wind_ts_df.timestep = 1:nrow(wind_ts_df)
-    df_long = stack(wind_ts_df, Not(:timestep), variable_name="plant_id", value_name="wind_power")
-    df_long.plant_id = parse.(Int, df_long.plant_id)
-    P = unique(df_long.plant_id)
+    df = stack(wind_ts_df, Not(:timestep), variable_name="plant_id", value_name="wind_power")
+    df.plant_id = parse.(Int, df.plant_id)
+    P = unique(df.plant_id)
     extended_df = DataFrame()
     if steps_per_hour != 1
         for p in P        
             extended_plant_df = DataFrame()
-            extended_plant_df.wind_power = extend_ts(df_long[df_long.plant_id .== p, :wind_power], steps_per_hour)
+            extended_plant_df.wind_power = extend_ts(df[df.plant_id .== p, :wind_power], steps_per_hour)
             extended_plant_df.timestep = 1:(24*steps_per_hour)
             extended_plant_df.plant_id .= p
             append!(extended_df, extended_plant_df)
         end
-        XLSX.writetable("output/wind_ts_data.xlsx", extended_df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
-    else
-        XLSX.writetable("output/wind_ts_data.xlsx", df_long, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
     end
+    df = extended_df
+    df = generate_scenarios(df, :wind_power, scenarios)
+    XLSX.writetable("output/wind_ts_data.xlsx", df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
+
 end
 
 function get_wind_ts(year=2020, month=1, day=1)
@@ -110,7 +112,7 @@ function process_hydro_data(steps_per_hour)
 end
 
 
-function process_load_data(steps_per_hour)
+function process_load_data(steps_per_hour, scenarios)
     file_path = "input/consumption.xlsx"
     df = DataFrame(XLSX.readtable(file_path, "Sheet1", infer_eltypes=true))
     multiplier = 200
@@ -120,9 +122,9 @@ function process_load_data(steps_per_hour)
     df.timestep = repeat(1:24, outer=3)
     df.area = repeat(1:3, inner=24)
     df = select(df, :area, :timestep, :Forbruk)
-
+    
+    A = unique(df.area)
     if steps_per_hour != 1
-        A = unique(df.area)
         extended_df = DataFrame()
         for a in A        
             extended_area_df = DataFrame()
@@ -131,10 +133,15 @@ function process_load_data(steps_per_hour)
             extended_area_df.area .= a
             append!(extended_df, extended_area_df)
         end
-        XLSX.writetable("output/load_data.xlsx", extended_df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
-    else
-        XLSX.writetable("output/load_data.xlsx", df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
     end
+    df = extended_df
+    display(df)
+    df = generate_scenarios(df, :Forbruk, scenarios)
+    display(df)
+
+    XLSX.writetable("output/load_data.xlsx", df, overwrite=true, sheetname="Sheet1", anchor_cell="A1")
+
+
 end
 
 function extend_ts(ts, n_steps)
@@ -178,6 +185,50 @@ function ts_interpolation(n_steps, input_ts)
     return output_vals
 end
 
+
+function generate_scenarios(df::DataFrame, column_to_scale::Symbol, num_scenarios::Int)
+    # Ensure the column to scale is converted to Float64 for compatibility
+    df[!, column_to_scale] = Float64.(df[!, column_to_scale])
+    
+    # Create an empty DataFrame to store results
+    results = copy(df)
+    results.scenario = fill(1, nrow(df))
+
+    # Define the normal distribution for scaling
+    dist = Normal(1.0, 0.1)
+    hard_coded_scaling = [0.99, 0.92, 1.02, 0.93, 0.98, 0.84, 1.01, 0.97, 1.04, 1.25]
+
+    # Generate scenarios
+    for scenario in 2:num_scenarios
+        # Create a copy of the DataFrame to keep other columns the same
+        scenario_df = copy(df)
+
+        # Scale the specified column
+        # scaling_factor = rand(dist)
+        scaling_factor = hard_coded_scaling[scenario-1]
+        scenario_df[!, column_to_scale] .= df[!, column_to_scale] .* scaling_factor
+
+        # Add the scenario number column
+        scenario_df.scenario = fill(scenario, nrow(df))
+
+        # Append to the results DataFrame
+        append!(results, scenario_df)
+    end
+    results[!, column_to_scale] .= round.(results[!, column_to_scale], digits=1)
+    return results
+end
+
+# Example DataFrame
+# df = DataFrame(time_value = 1:10, other_column = repeat(["A", "B"], 5))
+# num_scenarios = 2
+
+# # Call the function
+# results = generate_scenarios(df, :time_value, num_scenarios)
+# println(results)
+
+# a = [1, 2, 5, 6, 2]
+# b = generate_scenarios(a, 3)
+# display(b)
 # process_hydro_data(4)
 # process_wind_ts_data(4)
 # ts_interpolation(4)
