@@ -7,6 +7,13 @@ include(joinpath(@__DIR__, "plot_results.jl"))
 include(joinpath(@__DIR__, "find_bernstein_weights.jl"))
 include(joinpath(@__DIR__, "continuous_write_results.jl"))
 
+# Create output directories if they don't exist
+for dir in ["output", "continuous_results", "discrete_results", "results"]
+    if !isdir(dir)
+        mkdir(dir)
+    end
+end
+
 function process_raw_data(steps_per_hour, scenarios, sampling_points)
     # process_wind_ts_data(steps_per_hour, scenarios)
     process_load_data(12, scenarios, sampling_points)

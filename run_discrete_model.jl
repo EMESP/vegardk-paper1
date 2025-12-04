@@ -2,6 +2,12 @@ include(joinpath(@__DIR__, "process_input_data.jl"))
 include(joinpath(@__DIR__, "discrete_model.jl"))
 include(joinpath(@__DIR__, "plot_results.jl"))
 
+# Create output directories if they don't exist
+for dir in ["output", "continuous_results", "discrete_results", "results"]
+    if !isdir(dir)
+        mkdir(dir)
+    end
+end
 
 steps_per_hour = 4
 scenarios = 10
