@@ -1,16 +1,18 @@
-include(joinpath(@__DIR__, "process_input_data.jl"))
-# include(joinpath(@__DIR__, "continuous_model.jl"))
-include(joinpath(@__DIR__, "continuous_model_simulator.jl"))
-# include(joinpath(@__DIR__, "continuous_model_testing.jl"))
-# include(joinpath(@__DIR__, "continuous_model_exogenous_prod.jl"))
-include(joinpath(@__DIR__, "plot_results.jl"))
-include(joinpath(@__DIR__, "find_bernstein_weights.jl"))
-include(joinpath(@__DIR__, "continuous_write_results.jl"))
+include(joinpath(@__DIR__, "..", "src", "process_input_data.jl"))
+# include(joinpath(@__DIR__, "..", "src", "continuous_model.jl"))
+include(joinpath(@__DIR__, "..", "src", "continuous_model_simulator.jl"))
+# include(joinpath(@__DIR__, "..", "src", "continuous_model_testing.jl"))
+# include(joinpath(@__DIR__, "..", "src", "continuous_model_exogenous_prod.jl"))
+include(joinpath(@__DIR__, "..", "src", "plot_results.jl"))
+include(joinpath(@__DIR__, "..", "src", "find_bernstein_weights.jl"))
+include(joinpath(@__DIR__, "..", "src", "continuous_write_results.jl"))
 
 # Create output directories if they don't exist
+project_root = joinpath(@__DIR__, "..")
 for dir in ["output", "continuous_results", "discrete_results", "results"]
-    if !isdir(dir)
-        mkdir(dir)
+    dir_path = joinpath(project_root, dir)
+    if !isdir(dir_path)
+        mkdir(dir_path)
     end
 end
 

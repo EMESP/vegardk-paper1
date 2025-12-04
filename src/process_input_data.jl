@@ -97,7 +97,7 @@ function get_wind_ts(year=2020, month=1, day=1)
 end
 
 function process_hydro_data(steps_per_hour, scenarios)
-    file_path = joinpath(@__DIR__, "input", "moduldata.xlsx")
+    file_path = joinpath(@__DIR__, "..", "input", "moduldata.xlsx")
     # xf = XLSX.readxlsx(file_path)
     # sh = xf["Sheet1"]
 

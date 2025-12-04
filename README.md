@@ -53,6 +53,19 @@ This will install all required Julia packages listed in `Project.toml`.
 
 ```
 vegardk-paper1/
+├── scripts/                  # Entry point scripts
+│   ├── run_continuous_model.jl
+│   └── run_discrete_model.jl
+├── src/                      # Source code library files
+│   ├── continuous_model_simulator.jl
+│   ├── continuous_write_results.jl
+│   ├── discrete_model.jl
+│   ├── elevation_matrix.jl
+│   ├── find_bernstein_weights.jl
+│   ├── get_hydro_data.jl
+│   ├── helper_functions.jl
+│   ├── plot_results.jl
+│   └── process_input_data.jl
 ├── input/                    # Input data files (required)
 │   ├── gen.csv              # Generator specifications
 │   ├── moduldata.xlsx       # Hydropower module data
@@ -63,7 +76,8 @@ vegardk-paper1/
 ├── continuous_results/       # Continuous model outputs (auto-created)
 ├── discrete_results/         # Discrete model outputs (auto-created)
 ├── results/                  # Plot outputs (auto-created)
-└── *.jl                     # Julia source files
+├── Project.toml             # Package dependencies
+└── README.md                # This file
 ```
 
 Output directories are automatically created when you run the models.
@@ -73,7 +87,7 @@ Output directories are automatically created when you run the models.
 ### Running the Discrete Model
 
 ```bash
-julia --project=. run_discrete_model.jl
+julia --project=. scripts/run_discrete_model.jl
 ```
 
 This runs the discrete-time optimization model and writes results to `discrete_results/`.
@@ -81,7 +95,7 @@ This runs the discrete-time optimization model and writes results to `discrete_r
 ### Running the Continuous Model
 
 ```bash
-julia --project=. run_continuous_model.jl
+julia --project=. scripts/run_continuous_model.jl
 ```
 
 This runs the continuous-time optimization model with Bernstein polynomial approximation and writes results to `continuous_results/`.
@@ -90,7 +104,7 @@ This runs the continuous-time optimization model with Bernstein polynomial appro
 
 To modify model parameters, edit the values in the main scripts:
 
-**In `run_continuous_model.jl`:**
+**In `scripts/run_continuous_model.jl`:**
 - `steps_per_hour = 4` - Time resolution (timesteps per hour)
 - `input_data_scenarios = 10` - Number of scenarios to generate
 - `simulation_scenarios = 9` - Number of scenarios to simulate
@@ -98,7 +112,7 @@ To modify model parameters, edit the values in the main scripts:
 - `weights_calc_sampling_points = 1800` - Sampling resolution for weight calculation
 - `res_sampling_points = 60` - Sampling resolution for results
 
-**In `run_discrete_model.jl`:**
+**In `scripts/run_discrete_model.jl`:**
 - `steps_per_hour = 4` - Time resolution
 - `scenarios = 10` - Number of scenarios
 
@@ -120,9 +134,11 @@ Results are written to:
 
 ## Code Structure
 
-Main files:
+Entry point scripts (in `scripts/`):
 - `run_continuous_model.jl` - Continuous model entry point
 - `run_discrete_model.jl` - Discrete model entry point
+
+Library files (in `src/`):
 - `continuous_model_simulator.jl` - Continuous model definition
 - `discrete_model.jl` - Discrete model definition
 - `process_input_data.jl` - Input data preprocessing
